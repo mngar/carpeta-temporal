@@ -1,0 +1,61 @@
+library(synbreedData)
+
+data(mice)
+
+str(maize)
+dim(maize$geno)
+maize$geno[1:10,1:10]
+
+summary(maize$geno)
+
+
+
+
+str(mice)
+dim(mice$geno)
+mice$geno[1:10,1:10]
+
+summary(mice$geno)
+
+M = mice$geno[1:10,1:50]
+code = unique(M[1,])
+code
+## [1] "A/G" "G/G" "C/C" "A/T" "A/A" "T/T" "C/G" "A/C"
+
+M[M == "A/G"] = "AG"
+M[M == "G/G"] = "GG"
+M[M == "C/C"] = "CC"
+M[M == "A/T"] = "AT"
+M[M == "A/A"] = "AA"
+M[M == "T/T"] = "TT"
+M[M == "C/G"] = "CG"
+M[M == "A/C"] = "AC"
+M[M == "C/A"] = "CA"
+M[M == "G/A"] = "GA"
+M[M == "G/C"] = "GC"
+
+
+
+library(ASRgenomics)
+Mr <- snp.recode(M = M, na.string = NA)
+
+library(CJAMP)
+maf = compute_MAF(Mr$Mrecode)
+
+maf
+# [1] 0.65 0.65 0.80 0.65 1.00 0.80 0.65 1.00 0.80 0.85 0.65 1.00 1.00 1.00 0.65 1.00 1.00 0.65 1.00 0.80 0.85 0.85 0.80 0.65 0.65 0.80 0.80 0.85 0.65 0.65 0.65 1.00 0.65 0.65 0.65 1.00
+# [37] 0.65 0.80 0.85 0.85 0.65 1.00 1.00 1.00 1.00 0.65 1.00 1.00 1.00 0.95
+
+# el maf correcto es (1-maf)  ya que asigno 2 al alelo mayoritario--> hay que reemplazar el 2 x 0
+
+Mr$Mrecode[Mr$Mrecode == 2] = 0
+
+maf = compute_MAF(Mr$Mrecode)
+ maf
+# [1] 0.35 0.35 0.20 0.35 0.00 0.20 0.35 0.00 0.20 0.15 0.35 0.00 0.00 0.00 0.35 0.00 0.00 0.35 0.00 0.20 0.15 0.15 0.20 0.35 0.35 0.20 0.20 0.15 0.35 0.35 0.35 0.00 0.35 0.35 0.35 0.00
+# [37] 0.35 0.20 0.15 0.15 0.35 0.00 0.00 0.00 0.00 0.35 0.00 0.00 0.00 0.05
+
+which(maf<0.05)
+
+M2 = Mr$Mrecode[,-c(which(maf<0.05))]
+

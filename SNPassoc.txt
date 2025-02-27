@@ -1,0 +1,98 @@
+
+#library(SNPassoc)
+
+data(asthma, package = "SNPassoc")
+dim(asthma)
+str(asthma)
+
+asthma.s <- setupSNP(data=asthma, colSNPs=7:ncol(asthma), sep="")
+
+head(asthma.s$rs1422993)
+
+class(asthma.s$rs1422993)
+
+summary(asthma.s$rs1422993)
+
+plot(asthma.s$rs1422993)
+
+summary(asthma.s, print=FALSE)
+
+association(casecontrol ~ rs1422993, data = asthma.s)
+
+maxstat(asthma.s$casecontrol, asthma.s$rs1422993)
+association(casecontrol ~ rs1422993, asthma.s, model="dominant")
+
+## Association tests are typically adjusted by covariates, which are incorporated in the model in the usual form
+association(casecontrol ~ rs1422993 + country + smoke, asthma.s)
+
+## ORs for stratified analysis on given categorical covariates are used to verify whether the risk is constant across groups
+association(casecontrol ~ rs1422993 + survival::strata(gender), asthma.s)
+
+##We can see, for instance, that the dominant model is significant only in males. The subset argument allows fitting the model in a subgroup of individuals
+association(casecontrol ~ rs1422993, asthma.s, 
+                subset=country=="Spain")
+
+## These analyses can be also be performed in quantitative traits, such as body mass index, since association function automatically selects the error distribution of the regression analysis (either Gaussian or binomial).
+association(bmi ~ rs1422993, asthma.s) 
+
+
+## For multiple SNP data, our objective is to identify the variants that are significantly associated with the trait. The most basic strategy is, therefore, to fit an association test like the one described above for each of the SNPs in the dataset and determine which of those associations are significant. The massive univariate testing is the most widely used analysis method for omic data because of its simplicity. In SNPassoc, this type of analysis is done with the function WGassociation
+
+ans <- WGassociation(casecontrol, data=asthma.s)
+head(ans)
+
+## SNPassoc is computationally limited on large genomic data. The computing time can be reduced by parallelization, specifying in the argument mc.cores the number of computing cores to be used. Alternatively, the function scanWGassociation, a C compiled function, can be used to compute a predetermined genetic model across all SNPs, passed in the argument model, which by default is the additive model
+## ans.fast <- scanWGassociation(casecontrol, asthma.s)
+## NOTE: This function is not available on the SNPassoc version available on CRAN. The user can install the development version available on GitHub to get access to this function just executing
+##devtools::install_github("isglobal-brge/SNPassoc")
+
+## The P-values obtained from massive univariate analyses are visualized with the generic plot function
+
+plot(ans)
+
+## Maximum-statistic (see González et al. (2008)) can also be used to test association between asthma status and SNPs
+
+ans.max <- maxstat(asthma.s, casecontrol)
+ans.max
+
+## We note that even under the max-statistics none of the SNPs tested is significant under the Bonferroni correction (<0.0001) for multiple SNP testing
+
+#minimum P-value across SNPs
+min(ans.max["Pr(>z)",])
+
+infoTable <- WGstats(ans)
+
+## Gene-enviroment (GxE) analyses can be performed within SNPassoc using association function. Assume that we are interested in testing whether the risk of rs1422993 for asthma under the dominant model is different among smokers (variable smoke; 0=never, 1=ever). This code fits a model with an interaction term where the environmental variable is required to be a factor factor variable.
+
+association(casecontrol ~ dominant(rs1422993)*factor(smoke), 
+            data=asthma.s)
+
+
+## In a similar way, gene-gene interaction (GxG) of a given SNP epistasis model can also be fitted using the same function. In that case, the genetic model of the interacting SNP must be indicated in the model.inteaction argument.
+
+association(casecontrol ~ rs1422993*factor(rs184448), 
+            data=asthma.s, model.interaction = "dominant" )
+
+
+## The user also can perform GxG for a set of SNPs using this code. Let us assume we are interested in assessing interaction between the SNPs that are significant at 10% level
+
+ans <- WGassociation(casecontrol, data=asthma.s)
+mask <- apply(ans, 1, function(x) min(x, na.rm=TRUE)<0.1)
+sig.snps <- names(mask[mask])
+sig.snps
+
+idx <- which(colnames(asthma)%in%sig.snps)
+asthma.s2 <- setupSNP(asthma, colSNPs = idx, sep="")
+ans.int <- interactionPval(casecontrol ~ 1, data=asthma.s2)
+ans.int
+
+plot(ans.int)
+
+
+
+
+
+
+
+
+

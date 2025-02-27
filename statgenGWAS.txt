@@ -1,0 +1,440 @@
+library(statgenGWAS)
+
+#Load data
+
+data(dropsMarkers)
+data(dropsMap)
+data(dropsPheno)
+dim(dropsMarkers); dim(dropsMap); dim(dropsPheno)
+ dropsMarkers[1:10,1:10]; head(dropsMap); head(dropsPheno)
+
+
+# Create gData object
+
+## Add genotypes as row names of dropsMarkers and drop Ind column.
+rownames(dropsMarkers) <- dropsMarkers[["Ind"]]
+dropsMarkers <- dropsMarkers[colnames(dropsMarkers) != "Ind"]
+## Add genotypes as row names of dropsMap.
+rownames(dropsMap) <- dropsMap[["SNP.names"]]
+## Rename Chomosome and Position columns.
+colnames(dropsMap)[match(c("Chromosome", "Position"), colnames(dropsMap))] <- c("chr", "pos")
+## Create a gData object containing map and marker information.
+gDataDrops <- createGData(geno = dropsMarkers, map = dropsMap)
+## Rename Variety_ID to genotype.
+colnames(dropsPheno)[colnames(dropsPheno) == "Variety_ID"] <- "genotype"
+## Select relevant columns and convert data to a list.
+dropsPhenoList <- split(x = dropsPheno[c("genotype", "grain.yield",
+                                         "grain.number", "seed.size",
+                                         "anthesis", "silking", "plant.height",
+                                         "tassel.height", "ear.height")], 
+                        f = dropsPheno[["Experiment"]])
+## Add phenotypic data to gDataDrops.
+gDataDrops <- createGData(gData = gDataDrops, pheno = dropsPhenoList)
+## Summarize gDataDrops.
+summary(gDataDrops, trials = "Mur13W")
+## Plot genetic map.
+plot(gDataDrops)
+## Plot genetic map.
+## Highlight the 20.000th marker in the map.
+plot(gDataDrops, highlight = dropsMap[20000, ])
+## Remove duplicate SNPs from gDataDrops.
+gDataDropsDedup <- codeMarkers(gDataDrops, impute = FALSE, verbose = TRUE) 
+## Copy gData object.
+gDataDropsMiss <- gDataDrops
+## Add random missing values to 1% of the values in the marker matrix.
+set.seed(1)
+nVal <- nrow(gDataDropsMiss$markers) * ncol(gDataDropsMiss$markers)
+gDataDropsMiss$markers[sample(x = 1:nVal, size = nVal / 100)] <- NA
+## Impute missing values with random value.
+## Remove SNPs and genotypes with proportion of NA larger than 0.01.
+gDataDropsImputed <- codeMarkers(gData = gDataDropsMiss,
+                                 nMissGeno = 0.01, 
+                                 nMiss = 0.01, 
+                                 impute = TRUE, 
+                                 imputeType = "random", 
+                                 verbose = TRUE)
+## Impute missing values using beagle software.
+gDataDropsImputedBeagle <- codeMarkers(gData = gDataDropsMiss, 
+                                       impute = TRUE,
+                                       imputeType = "beagle",
+                                       verbose = TRUE)
+
+#Single trait GWAS
+
+## Run single trait GWAS for traits 'grain.yield' and 'anthesis' for trial Mur13W.
+GWASDrops <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                trials = "Mur13W",
+                                traits = c("grain.yield", "anthesis"))
+print(head(GWASDrops$GWAResult$Mur13W), row.names = FALSE)
+print(GWASDrops$signSnp$Mur13W, row.names = FALSE)
+
+
+
+
+
+
+
+
+
+#GWAS Summary
+
+## Create summary of GWASDrops.
+summary(GWASDrops)
+
+#GWAS Plots
+
+## Plot a QQ-plot of GWAS Drops.
+plot(GWASDrops, plotType = "qq", trait = "grain.yield")
+
+## Plot a manhattan plot of GWAS Drops.
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield")
+
+## Plot a manhattan plot of GWAS Drops.
+## Set significance threshold to 4 and only plot chromosomes 6 to 8.
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", yThr = 4, chr = 6:8)
+
+
+## Plot a manhattan plot of GWAS Drops.
+## Plot only 5% of SNPs with a LOD below 3.
+set.seed(1)
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", lod = 3)
+
+## Plot a manhattan plot of GWAS Drops with significance threshold 4.
+## Assume PZE-106021410 and PZE-105012420 are SNPs with known effects.
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", 
+     effects = c("PZE-106021410", "PZE-105012420"))
+
+
+#QTL plots
+
+## Plot a qtl plot of GWAS Drops for Mur13W.
+plot(GWASDrops, plotType = "qtl")
+
+## Plot a qtl plot of GWAS Drops for Mur13W.
+## Set significance threshold to 4.
+plot(GWASDrops, plotType = "qtl", yThr = 4)
+
+## Plot a qtl plot of GWAS Drops for Mur13W.
+## Set significance threshold to 4 and normalize effect estimates.
+plot(GWASDrops, plotType = "qtl", yThr = 4, normalize = TRUE)
+
+## Run single trait GWAS for trial 'Mur13W' and trait 'grain.yield'
+## Use chromosome specific kinship matrices computed using method of van Raden.
+GWASDropsChrSpec <- runSingleTraitGwas(gData = gDataDropsDedup, 
+                                       traits = "grain.yield",
+                                       trials = "Mur13W",
+                                       GLSMethod = "multi",
+                                       kinshipMethod = "vanRaden")
+
+#Significance thresholds
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Use a fixed significance threshold of 4.
+GWASDropsFixThr <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                      trials = "Mur13W",
+                                      traits = "grain.yield",
+                                      thrType = "fixed",
+                                      LODThr = 4)
+
+#Variance covariance matrix
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Use the Newton Raphson algorithm for computing the variance components.
+GWASDropsNR <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                  trials = "Mur13W",
+                                  traits = "grain.yield",
+                                  remlAlgo = "NR")
+
+#Genomic control correction
+
+GWASDrops$GWASInfo$inflationFactor$Mur13W
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Perform genomic correction on the p-Values.
+GWASDropsGenControl <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                          trials = "Mur13W",
+                                          traits = "grain.yield",
+                                          genomicControl = TRUE)
+
+#Covariates
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Use PZE-106021410, the most significant SNP, a SNP covariate.
+GWASDropsSnpCov <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                      trials = "Mur13W",
+                                      traits = "grain.yield",
+                                      snpCov = "PZE-106021410")
+
+#Minor Allele Frequency
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Only include SNPs that have a MAC of at least 20
+GWASDropsMAC <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                   trials = "Mur13W",
+                                   traits = "grain.yield",
+                                   useMAF = FALSE,
+                                   MAC = 20)
+
+#SNPs close to significant SNPs
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Include SNPs within 200000 centimorgan of significant SNPs with a minimum LD of 0.1.
+GWASDropsInclClose <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                         trials = "Mur13W",
+                                         traits = "grain.yield",
+                                         sizeInclRegion = 200000,
+                                         minR2 = 0.1)
+## Check signSnp in output.
+print(head(GWASDropsInclClose$signSnp$Mur13W), row.names = FALSE)
+
+
+## Create summary of GWASDrops.
+summary(GWASDrops)
+
+## Plot a QQ-plot of GWAS Drops.
+plot(GWASDrops, plotType = "qq", trait = "grain.yield")
+
+
+## Plot a manhattan plot of GWAS Drops.
+## Set significance threshold to 4 and only plot chromosomes 6 to 8.
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", yThr = 4, chr = 6:8)
+
+
+## Plot a manhattan plot of GWAS Drops.
+## Set significance threshold to 4 and only plot first part of chromosome 6.
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", 
+     yThr = 4, chr = 6, startPos = 0, endPos = 6e7)
+
+
+## Plot a manhattan plot of GWAS Drops.
+## Plot only 5% of SNPs with a LOD below 3.
+set.seed(1)
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", lod = 3)
+
+
+## Plot a manhattan plot of GWAS Drops with significance threshold 4.
+## Assume PZE-106021410 and PZE-105012420 are SNPs with known effects.
+plot(GWASDrops, plotType = "manhattan", trait = "grain.yield", 
+     effects = c("PZE-106021410", "PZE-105012420"))
+
+
+## Plot a qtl plot of GWAS Drops for Mur13W.
+## Set significance threshold to 4.
+plot(GWASDrops, plotType = "qtl", yThr = 4)
+
+
+## Plot a qtl plot of GWAS Drops for Mur13W.
+## Set significance threshold to 4 and normalize effect estimates.
+plot(GWASDrops, plotType = "qtl", yThr = 4, normalize = TRUE)
+
+
+## Run single trait GWAS for trial 'Mur13W' and trait 'grain.yield'
+## Use chromosome specific kinship matrices computed using method of van Raden.
+GWASDropsChrSpec <- runSingleTraitGwas(gData = gDataDropsDedup, 
+                                       traits = "grain.yield",
+                                       trials = "Mur13W",
+                                       GLSMethod = "multi",
+                                       kinshipMethod = "vanRaden")
+
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Use a fixed significance threshold of 4.
+GWASDropsFixThr <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                      trials = "Mur13W",
+                                      traits = "grain.yield",
+                                      thrType = "fixed",
+                                      LODThr = 4)
+
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Use the Newton Raphson algorithm for computing the variance components.
+GWASDropsNR <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                  trials = "Mur13W",
+                                  traits = "grain.yield",
+                                  remlAlgo = "NR")
+
+
+GWASDrops$GWASInfo$inflationFactor$Mur13W
+
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Perform genomic correction on the p-Values.
+GWASDropsGenControl <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                          trials = "Mur13W",
+                                          traits = "grain.yield",
+                                          genomicControl = TRUE)
+
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Use PZE-106021410, the most significant SNP, a SNP covariate.
+GWASDropsSnpCov <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                      trials = "Mur13W",
+                                      traits = "grain.yield",
+                                      snpCov = "PZE-106021410")
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Only include SNPs that have a MAC of at least 20
+GWASDropsMAC <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                   trials = "Mur13W",
+                                   traits = "grain.yield",
+                                   useMAF = FALSE,
+                                   MAC = 20)
+
+
+## Run single trait GWAS for trait 'grain.yield' for Mur13W.
+## Include SNPs within 200000 centimorgan of significant SNPs with a minimum LD of 0.1.
+GWASDropsInclClose <- runSingleTraitGwas(gData = gDataDropsDedup,
+                                         trials = "Mur13W",
+                                         traits = "grain.yield",
+                                         sizeInclRegion = 200000,
+                                         minR2 = 0.1)
+## Check signSnp in output.
+print(head(GWASDropsInclClose$signSnp$Mur13W), row.names = FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+https://cran.r-project.org/web/packages/statgenGWAS/vignettes/GWAS.html
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############### otro : https://bookdown.org/jrodriguez36/PGRP-Mapping-Workshop/gwas.html
+################### https://github.com/xiaolei-lab/rMVP
+
+
+library(rMVP)
+library(data.table)
+library(tidyverse)
+
+# Full-featured function (Recommended)
+MVP.Data(fileNum="Numeric.txt",
+         filePhe="Phenotype.txt",
+         fileMap="Map.txt",
+         sep.num="\t",
+         sep.map="\t", 
+         sep.phe="\t",
+         fileKin=FALSE,
+         filePC=FALSE,
+         #maxLine=10000,
+         out="mvp.num"
+         )
+
+# Only convert genotypes
+MVP.Data.Numeric2MVP("Numeric.txt", out='mvp', maxLine=1e4, auto_transpose=T) # the genotype data should be fully imputed before using this function
+
+
+
+
+
+
+
+
+
+
+
+ ls()
+ [1] "dropsMap"            "dropsMarkers"        "dropsPheno"          "dropsPhenoList"      "Esigma"             
+ [6] "feno"                "gDataDrops"          "gDataDropsDedup"     "gDataDropsImputed"   "gDataDropsMiss"     
+[11] "GWASDrops"           "GWASDropsChrSpec"    "GWASDropsFixThr"     "GWASDropsGenControl" "GWASDropsInclClose" 
+[16] "GWASDropsMAC"        "GWASDropsNR"         "GWASDropsSnpCov"     "map"                 "myGD"               
+[21] "Nind"                "Nmarkers"            "Nqtl"                "nsimout"             "nVal"               
+[26] "Perror"              "Pmean"               "pop1"                "pop2"                "pop3"               
+[31] "pop4"                "popfeno"             "population"          "QTL"              
+
+
+myGAPIT <- GAPIT(
+  Y=feno,
+  GD=pop1,
+  GM=map,
+  model=c("GLM"),# choose model
+  PCA.total=0,                                          # set total PCAs
+  Inter.Plot=TRUE,                                      # perform interactive plot
+  Multiple_analysis=TRUE,                               # perform multiple analysis
+  PCA.3d=TRUE,                                          # plot 3d interactive PCA
+  file.output=T,
+  Geno.View.output=FALSE
+)
+
+
+
+imMVP <- MVP(
+    phe=feno[1:200,],      #NA is acceptable in phenotype            #precisa que coincidan las dimensiones con geno
+    geno=as.big.matrix(pop1[,2:ncol(pop1)]),			#solo matriz numerica y tiene que ser clase big.matrix
+    map=map,
+    #K=Kinship,             #if you have pre-computed GRM, please keep there open, otherwise rMVP will compute it automatically
+    #CV.GLM=Covariates,     #if you have environmental covariates, please keep all 'CV.*' open
+    #CV.MLM=Covariates,
+    #CV.FarmCPU=Covariates,
+    nPC.GLM=5,              #if you have added PCs into covariates, please keep there closed
+    nPC.MLM=3,              #if you don't want to add PCs as covariates, please comment out the parameter instead of setting it to 0.
+    nPC.FarmCPU=3,
+    maxLine=10000,          #smaller value would reduce the memory cost
+    #ncpus=10,
+    vc.method="BRENT",      #only works for MLM
+    method.bin="static",    # "FaST-LMM", "static" (#only works for FarmCPU)
+    threshold=0.05,
+    method=c("GLM", "MLM", "FarmCPU"),
+    file.output=c("pmap", "pmap.signal", "plot", "log")
+)
+
+MVP.Report(imMVP,plot.type="q",col=c("dodgerblue1", "olivedrab3", "darkgoldenrod1"),threshold=1e6,
+	signal.pch=19,signal.cex=1.5,signal.col="red", # conf.int.col = "grey",
+	box=FALSE,multracks=TRUE, file.type="jpg",memo="",dpi=300)
+
+
+
+
+library(CJAMP)
+
+glm.res = as.data.frame(imMVP$glm.results)
+caus.glm = c(
+
+compute_expl_var(genodata = as.big.matrix(pop1[,2:ncol(pop1)]), phenodata = feno[1:200,],
+                 type = c("Rsquared_unadj", "Rsquared_adj"),
+                 causal_idx = NULL, effect_causal = glm.res$Effect)
+
+
+
+
