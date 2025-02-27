@@ -19,7 +19,7 @@ install.packages("tidyverse")
 install.packages("CJAMP")
 install.packages("ASRgenomics")
 #synbreedData ... archivado en CRAN
-
+install.packages("statgenGWAS")
 
 
 #CARGA DE PAQUETES
@@ -282,9 +282,9 @@ pow_pop4 <- dim(asoc_GLM4)[1]/Nqtl
 
 
 
-# Predecir fenotipos en la poblacion de validación a partir de los distintos modelos:
+# Predecir fenotipos en la poblacion de validaciÃ³n a partir de los distintos modelos:
 
-# ajustar un modelo lineal con los marcadores asociados mediante la función glm
+# ajustar un modelo lineal con los marcadores asociados mediante la funciÃ³n glm
 # fit.glm <- glm(feno ~ geno[,c(marcadores asociados)])
 # por ejemplo:
 # colocando entre los parentesis los nombres de los marcadores asociados o las columnas donde se ubican estos en la matriz de genotipos.
